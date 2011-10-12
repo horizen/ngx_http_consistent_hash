@@ -5,7 +5,7 @@
 #include <ngx_http.h>
 
 
-#define NR_BUCKETS          512
+#define NR_BUCKETS          521
 #define NR_VIRTUAL_NODES   (1024 * 16)
 
 
@@ -31,7 +31,9 @@ typedef struct ngx_http_upstream_chash_virtual_node_s  ngx_http_upstream_chash_v
 
 struct ngx_http_upstream_chash_virtual_node_s
 {
+    ngx_uint_t                               index;
     ngx_uint_t                               point;
+
     ngx_http_upstream_chash_real_node_t     *real;
     ngx_http_upstream_chash_virtual_node_t  *next;
 };
@@ -131,16 +133,22 @@ ngx_http_upstream_get_consistent_hash_peer(ngx_peer_connection_t *pc, void *data
     ngx_http_upstream_chash_real_node_t     *rnode;
     ngx_http_upstream_chash_virtual_node_t  *vnode;
 
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                   "get consistent hash peer, v_number: %ui, r_number: %ui",
+                   ring->v_number, ring->r_number);
+
+    ngx_uint_t  i;
+
+    for (i=0; i<ring->v_number; i++) {
+        ngx_log_debug5(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                       "get consistent hash peer, %ui: vnode: %ui, point: %ui, rnode: %ui, name: %s",
+                       i, ring->v_nodes[i].index, ring->v_nodes[i].point,
+                       ring->v_nodes[i].real->index, ring->v_nodes[i].real->name.data);
+    }
+
+
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
                    "get consistent hash peer, try: %ui", pc->tries);
-
-//    ngx_uint_t  i;
-//
-//    for (i=0; i<ring->v_number; i++) {
-//        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-//                       "get consistent hash peer, vnode: %ui, point: %ui, rnode: %ui",
-//                       i, ring->v_nodes[i].point, ring->v_nodes[i].real->index);
-//    }
 
     now = ngx_time();
 
@@ -160,8 +168,9 @@ ngx_http_upstream_get_consistent_hash_peer(ngx_peer_connection_t *pc, void *data
 
             if (!(chp->tried[n] & m)) {
 
-                ngx_log_debug1(NGX_LOG_DEBUG_HTTP, pc->log, 0,
-                               "get consistent hash peer, rnode index: %ui", rnode->index);
+                ngx_log_debug2(NGX_LOG_DEBUG_HTTP, pc->log, 0,
+                               "get consistent hash peer, vnode index: %ui, rnode index: %ui",
+                               vnode->index, rnode->index);
 
                 if (!rnode->down) {
 
@@ -373,15 +382,8 @@ ngx_http_upstream_init_consistent_hash(ngx_conf_t *cf, ngx_http_upstream_srv_con
         total_weights += server[i].weight * server[i].naddrs;
     }
 
-    scale = NR_VIRTUAL_NODES / total_weights;
-
-    for (i=0; i<us->servers->nelts; i++) {
-        if (server[i].backup) {
-            continue;
-        }
-
-        v_number += server[i].weight * server[i].naddrs * scale;
-    }
+    scale    =  NR_VIRTUAL_NODES / total_weights;
+    v_number =  scale * total_weights;
 
     ring = ngx_pcalloc(cf->pool, sizeof(ngx_http_upstream_chash_ring_t));
     if (ring == NULL) {
@@ -427,8 +429,9 @@ ngx_http_upstream_init_consistent_hash(ngx_conf_t *cf, ngx_http_upstream_srv_con
             ring->r_nodes[r].index = r;
 
             for (k = 0; k < server[i].weight*scale; k++) {
-                snprintf((char *)hash_data, sizeof("255.255.255.255:65535-65535"), "%s-%i", server[i].addrs[j].name.data, (int)k);
+                ngx_snprintf(hash_data, sizeof("255.255.255.255:65535-65535"), "%V-%ui", &server[i].addrs[j].name, k);
 
+                ring->v_nodes[v].index = v;
                 ring->v_nodes[v].real  = &ring->r_nodes[r];
                 ring->v_nodes[v].point = ngx_crc32_long(hash_data, strlen((char *)hash_data));
 
