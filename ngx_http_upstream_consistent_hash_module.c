@@ -16,7 +16,7 @@ struct ngx_http_upstream_chash_virtual_node_s
     ngx_uint_t                               server_num;
     ngx_uint_t                               point;
 
-    ngx_http_upstream_rr_peer_t		    *rr_peer;
+    ngx_http_upstream_rr_peer_t	            *rr_peer;
     ngx_http_upstream_chash_virtual_node_t  *next;
 };
 
@@ -36,7 +36,7 @@ typedef struct
 
 typedef struct {
     ngx_uint_t                               point;
-    ngx_uint_t				     tries;
+    ngx_uint_t				                 tries;
 
     uintptr_t                               *tried;
     uintptr_t                                data;
